@@ -183,6 +183,8 @@
       background:linear-gradient(135deg,#eefafa,#ffffff);
       box-shadow:0 18px 44px rgba(7,95,109,.10);
       isolation:isolate;
+      perspective:1200px;
+      transform-style:preserve-3d;
     }
 
     .banner-slider::after{
@@ -202,28 +204,32 @@
       height:100%;
       object-fit:cover;
       opacity:0;
-      transform:scale(1.035);
-      animation:bannerFade 40s infinite;
+      transform:rotateY(-90deg) scale(.96);
+      transform-origin:center center;
+      transform-style:preserve-3d;
+      backface-visibility:hidden;
+      animation:bannerFlip3d 100s infinite cubic-bezier(.22,.8,.24,1); /* 10 بنرات × 10 ثوانٍ لكل بنر */
       z-index:1;
+      will-change:transform,opacity;
     }
 
     .banner-slider img:nth-child(1){animation-delay:0s}
-    .banner-slider img:nth-child(2){animation-delay:4s}
-    .banner-slider img:nth-child(3){animation-delay:8s}
-    .banner-slider img:nth-child(4){animation-delay:12s}
-    .banner-slider img:nth-child(5){animation-delay:16s}
-    .banner-slider img:nth-child(6){animation-delay:20s}
-    .banner-slider img:nth-child(7){animation-delay:24s}
-    .banner-slider img:nth-child(8){animation-delay:28s}
-    .banner-slider img:nth-child(9){animation-delay:32s}
-    .banner-slider img:nth-child(10){animation-delay:36s}
+    .banner-slider img:nth-child(2){animation-delay:10s}
+    .banner-slider img:nth-child(3){animation-delay:20s}
+    .banner-slider img:nth-child(4){animation-delay:30s}
+    .banner-slider img:nth-child(5){animation-delay:40s}
+    .banner-slider img:nth-child(6){animation-delay:50s}
+    .banner-slider img:nth-child(7){animation-delay:60s}
+    .banner-slider img:nth-child(8){animation-delay:70s}
+    .banner-slider img:nth-child(9){animation-delay:80s}
+    .banner-slider img:nth-child(10){animation-delay:90s}
 
-    @keyframes bannerFade{
-      0%{opacity:0;transform:scale(1.045)}
-      3%{opacity:1;transform:scale(1.02)}
-      9%{opacity:1;transform:scale(1)}
-      12%{opacity:0;transform:scale(1)}
-      100%{opacity:0;transform:scale(1.045)}
+    @keyframes bannerFlip3d{
+      0%{opacity:0;transform:rotateY(-90deg) scale(.96);filter:blur(1.5px)}
+      1.6%{opacity:1;transform:rotateY(0deg) scale(1);filter:blur(0)}
+      8.2%{opacity:1;transform:rotateY(0deg) scale(1);filter:blur(0)}
+      10%{opacity:0;transform:rotateY(90deg) scale(.96);filter:blur(1.5px)}
+      100%{opacity:0;transform:rotateY(90deg) scale(.96)}
     }
 
     .search-card{
@@ -652,19 +658,22 @@ setMessage("", "");
     }
 
     function parseFixedDatabaseSheet(sheet, sheetName){
-      var matrix = XLSX.utils.sheet_to_json(sheet, {header:1, defval:"", raw:false});
+      var matrix = XLSX.utils.sheet_to_json(sheet, {header:1, defval:"", raw:true});
       var rows = [];
 
       for(var rowIndex = CONFIG.startRowIndex; rowIndex < matrix.length; rowIndex++){
         var row = matrix[rowIndex] || [];
+        var gradeValue = cleanValue(row[CONFIG.columnIndex.grade]);
+        var locationValue = cleanValue(row[CONFIG.columnIndex.location]);
+
         var record = {
           "رقم الهويه": cleanValue(row[CONFIG.columnIndex.id]),
           "اسم الطالبة": cleanValue(row[CONFIG.columnIndex.name]),
-          "الصف": cleanValue(row[CONFIG.columnIndex.grade]),
+          "الصف": gradeValue,
           "القسم": cleanValue(row[CONFIG.columnIndex.section]),
           "رقم الجلوس": cleanValue(row[CONFIG.columnIndex.seat]),
           "اللجنة": cleanValue(row[CONFIG.columnIndex.committee]),
-          "مقر اللجنة": cleanValue(row[CONFIG.columnIndex.location])
+          "مقر اللجنة": locationValue || gradeValue
         };
 
         if(record["رقم الهويه"] || record["اسم الطالبة"]){
@@ -683,7 +692,7 @@ setMessage("", "");
 
       workbook.SheetNames.forEach(function(sheetName){
         var sheet = workbook.Sheets[sheetName];
-        var matrix = XLSX.utils.sheet_to_json(sheet, {header:1, defval:"", raw:false});
+        var matrix = XLSX.utils.sheet_to_json(sheet, {header:1, defval:"", raw:true});
         var parsed = parseRowsWithDynamicHeader(matrix, sheetName);
 
         if(parsed && (!best || parsed.rows.length > best.rows.length)){
@@ -773,6 +782,20 @@ setMessage("", "");
 
       student.idNormalized = onlyDigits(student.id);
       student.idSearchKey = normalizeSearchId(student.idNormalized);
+
+      if(student.idNormalized){
+        student.id = student.idNormalized;
+      }
+
+      var cleanedSeat = onlyDigits(student.seat);
+      if(cleanedSeat){
+        student.seat = cleanedSeat;
+      }
+
+      if(!student.location && student.grade){
+        student.location = student.grade;
+      }
+
       return student;
     }
 
@@ -872,7 +895,7 @@ setMessage("", "");
       select("#studentSection").textContent = student.section || "—";
       select("#studentSeat").textContent = student.seat || "—";
       select("#studentCommittee").textContent = student.committee || "—";
-      select("#studentLocation").textContent = student.location || "—";
+      select("#studentLocation").textContent = student.location || student.grade || "—";
       resultCard.style.display = "block";
     }
 
@@ -898,6 +921,12 @@ setMessage("", "");
       var fourth = mapStudent(testRows[3]);
       tests.push({name:"قراءة رقم قصير مثل ملف المدرسة", pass:fourth.idNormalized === "8051694" && fourth.seat === "111450052"});
       tests.push({name:"مطابقة الرقم مع أصفار زائدة", pass:normalizeSearchId("0008051694") === normalizeSearchId(fourth.idNormalized)});
+
+      var formattedSeatStudent = mapStudent({"اسم الطالب":"طالب تجريبي","رقم الهوية":"1192906293","رقم الجلوس":"$48131","الصف":"أول / ٢"});
+      tests.push({name:"تنظيف رمز العملة من رقم الجلوس", pass:formattedSeatStudent.seat === "48131"});
+
+      var noLocationStudent = mapStudent({"اسم الطالب":"طالب بلا مقر","رقم الهوية":"1000000000","الصف":"ثاني / ١","رقم الجلوس":"55"});
+      tests.push({name:"مقر اللجنة يساوي الصف عند الفراغ", pass:noLocationStudent.location === "ثاني / ١"});
 
       var parsedMatrix = parseRowsWithDynamicHeader(testMatrixWithTitleRows, "اختبار");
       var matrixStudent = parsedMatrix ? mapStudent(parsedMatrix.rows[0]) : null;
